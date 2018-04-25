@@ -116,7 +116,7 @@ def rotate(image, angle, center=None, scale=1.0):
     return rotated
 
 
-def make_sub_data(data, config):
+def make_sub_data_train(data, config):
 	"""
 		Make the sub_data set
 		Args:
@@ -129,19 +129,16 @@ def make_sub_data(data, config):
 	for scale in range(2,5):	    
 
 	    for i in range(len(data)):
-		if config.is_train:
-		    #input_, label_, = preprocess(data[i], config.scale) # do bicbuic only one scale
-		    input_, label_, = preprocess(data[i], scale) # do bicbuic turn around all scale
-		else: # Test just one picture
-		    input_, label_, = preprocess(data[i], config.scale) # do bicbuic
+
+		#input_, label_, = preprocess(data[i], config.scale) # do bicbuic only one scale
+		input_, label_, = preprocess(data[i], scale) # do bicbuic turn around all scale
 	
 		if len(input_.shape) == 3: # is color
 		    h, w, c = input_.shape
 		else:
 		    h, w = input_.shape # is grayscale
 	
-		#checkimage(input_)
-		
+		#checkimage(input_)		
 
 		nx, ny = 0, 0
 		for x in range(0, h - config.image_size + 1, config.stride):
@@ -186,6 +183,64 @@ def make_sub_data(data, config):
         return sub_input_sequence, sub_label_sequence, nx, ny
 
 
+
+def make_sub_data_test(data, config):
+    """
+	Make the sub_data set
+	Args:
+	    data : the set of all file path 
+	    config : the all flags
+    """
+    sub_input_sequence = []
+    sub_label_sequence = []
+
+		    
+
+    for i in range(len(data)):
+	input_, label_, = preprocess(data[i], config.scale) # do bicbuic
+
+	if len(input_.shape) == 3: # is color
+	    h, w, c = input_.shape
+	else:
+	    h, w = input_.shape # is grayscale
+
+	#checkimage(input_)	
+
+	nx, ny = 0, 0
+	for x in range(0, h - config.image_size + 1, config.stride):
+	    nx += 1; ny = 0
+	    for y in range(0, w - config.image_size + 1, config.stride):
+		ny += 1
+
+		sub_input = input_[x: x + config.image_size, y: y + config.image_size] # 41 * 41
+		sub_label = label_[x: x + config.label_size, y: y + config.label_size] # 41 * 41
+
+
+		# Reshape the subinput and sublabel
+		sub_input = sub_input.reshape([config.image_size, config.image_size, config.c_dim])
+		sub_label = sub_label.reshape([config.label_size, config.label_size, config.c_dim])
+
+		# Normialize
+		sub_input =  sub_input / 255.0
+		sub_label =  sub_label / 255.0
+		
+		#cv2.imshow("im1",sub_input)
+		#cv2.imshow("im2",sub_label)
+		#cv2.imshow("residual",sub_input - sub_label)
+		#cv2.waitKey(0)
+	
+		sub_input = rotate(sub_input,angle)	
+		sub_label = rotate(sub_label,angle)	
+
+		# Add to sequence
+		sub_input_sequence.append(sub_input)
+		sub_label_sequence.append(sub_label)
+        
+    # NOTE: The nx, ny can be ignore in train
+    return sub_input_sequence, sub_label_sequence, nx, ny
+
+
+
 def read_data(path):
     """
         Read h5 format data file
@@ -199,6 +254,8 @@ def read_data(path):
         input_ = np.array(hf.get('input'))
         label_ = np.array(hf.get('label'))
         return input_, label_
+
+
 
 def make_data_hf(input_, label_, config):
     """
@@ -247,14 +304,16 @@ def input_setup(config):
     data = load_data(config.is_train, config.test_img)
 
     # Make sub_input and sub_label, if is_train false more return nx, ny
-    sub_input_sequence, sub_label_sequence, nx, ny = make_sub_data(data, config)
+    if config.is_train:
+    	sub_input_sequence, sub_label_sequence, nx, ny = make_sub_data_train(data, config)
+    else:
+	sub_input_sequence, sub_label_sequence, nx, ny = make_sub_data_test(data, config)
 
 
     # Make list to numpy array. With this transform
     arrinput = np.asarray(sub_input_sequence) # [?, 41, 41, 3]
     arrlabel = np.asarray(sub_label_sequence) # [?, 41, 41, 3]
     make_data_hf(arrinput, arrlabel, config)
-
 
     return nx, ny
 

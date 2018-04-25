@@ -73,7 +73,7 @@ class VDSR(object):
         
         # NOTE : if train, the nx, ny are ingnored
 	# Read image files and make their sub-images and saved them as a h5 file format
-        nx, ny = input_setup(config)
+        #nx, ny = input_setup(config)
 
 	# get the target(train/test) .h5 file 
         data_dir = checkpoint_dir(config)
@@ -122,16 +122,29 @@ class VDSR(object):
                         print("Epoch: [%2d], step: [%2d], time: [%4.4f], loss: [%.8f]" % ((ep+1), counter, time.time()-time_, err ))
                     if counter % 1000 == 0:
                         self.save(config.checkpoint_dir, counter)
-        # Test
-        else:
-            print("Now Start Testing...")
-            
-            result = self.pred.eval({self.images: input_}) + input_
-            image = merge(result, [nx, ny], self.c_dim)
-            checkimage(merge(result, [nx, ny], self.c_dim))
-            #checkimage(image_LR)
-            imsave(image, config.result_dir+'/result.png', config)
-	    print("time: [%4.4f]" % (time.time()-time_))
+
+
+
+    def test(self, config):
+	# NOTE : if train, the nx, ny are ingnored
+	# Read image files and make their sub-images and saved them as a h5 file format
+        nx, ny = input_setup(config)
+
+	# get the test.h5 file 
+        data_dir = checkpoint_dir(config)
+
+	# Read h5 format data file
+        input_, label_ = read_data(data_dir)
+
+        print("Now Start Testing...")        
+	time_ = time.time()    
+
+        result = self.pred.eval({self.images: input_}) + input_
+        image = merge(result, [nx, ny], self.c_dim)
+        checkimage(merge(result, [nx, ny], self.c_dim))
+        
+        imsave(image, config.result_dir+'/result.png', config)
+	print("time: [%4.4f]" % (time.time()-time_))
 
 
 

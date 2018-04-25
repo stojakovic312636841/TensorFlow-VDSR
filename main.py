@@ -26,8 +26,10 @@ def main(_): #?
                       label_size = FLAGS.label_size,
                       layer = FLAGS.layer,
                       c_dim = FLAGS.c_dim)
-
-        vdsr.train(FLAGS)
+	if config.is_train:
+           vdsr.train(FLAGS)
+	else:
+	   vdsr.test(FLAGS)
 
 if __name__=='__main__':
     tf.app.run() # parse the command argument , the call the main function
