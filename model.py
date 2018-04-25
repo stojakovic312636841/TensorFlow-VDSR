@@ -11,6 +11,8 @@ from utils import (
     checkimage,
     imsave
 )
+
+
 class VDSR(object):
 
     def __init__(self,
@@ -25,6 +27,8 @@ class VDSR(object):
         self.layer = layer
         self.c_dim = c_dim
         self.build_model()
+
+
 
     def build_model(self):
         self.images = tf.placeholder(tf.float32, [None, self.image_size, self.image_size, self.c_dim], name='images')
@@ -52,6 +56,8 @@ class VDSR(object):
 
         self.saver = tf.train.Saver() # To save checkpoint
 
+
+
     def model(self):
         conv = []
         conv.append(tf.nn.relu(tf.nn.conv2d(self.images, self.weights['w_start'], strides=[1,1,1,1], padding='SAME') + self.biases['b_start']))
@@ -61,13 +67,18 @@ class VDSR(object):
         conv_end = tf.nn.conv2d(conv[i-1], self.weights['w_end'], strides=[1,1,1,1], padding='SAME') + self.biases['b_end'] # This layer don't need ReLU
         return conv_end
 
+
+
     def train(self, config):
         
         # NOTE : if train, the nx, ny are ingnored
+	# Read image files and make their sub-images and saved them as a h5 file format
         nx, ny = input_setup(config)
 
+	# get the target(train/test) .h5 file 
         data_dir = checkpoint_dir(config)
         
+	# Read h5 format data file
         input_, label_ = read_data(data_dir)
 
         # Stochastic gradient descent with the standard backpropagation
@@ -75,7 +86,8 @@ class VDSR(object):
         # NOTE: learning rate decay
         global_step = tf.Variable(0, trainable=False)
         #learning_rate = tf.train.exponential_decay(config.learning_rate, global_step * config.batch_size, len(input_)*100, 0.1, staircase=True)
-        # NOTE: Clip gradient
+        
+	# NOTE: Clip gradient
         opt = tf.train.AdamOptimizer(learning_rate=config.learning_rate)
         grad_and_value = opt.compute_gradients(self.loss)
         
@@ -85,12 +97,15 @@ class VDSR(object):
         self.train_op = opt.apply_gradients(capped_gvs, global_step=global_step)
         #self.train_op = tf.train.AdamOptimizer(learning_rate=config.learning_rate).minimize(self.loss)
 
-        tf.initialize_all_variables().run()
+	#Init all Var
+        tf.global_variables_initializer().run()
 
         counter = 0
         time_ = time.time()
 
+	#To load the checkpoint use to test or pretrain and refine model
         self.load(config.checkpoint_dir)
+
         # Train
         if config.is_train:
             print("Now Start Training...")
@@ -103,9 +118,9 @@ class VDSR(object):
                     counter += 1
                     _, err = self.sess.run([self.train_op, self.loss], feed_dict={self.images: batch_images, self.labels: batch_labels})
 
-                    if counter % 10 == 0:
+                    if counter % 100 == 0:
                         print("Epoch: [%2d], step: [%2d], time: [%4.4f], loss: [%.8f]" % ((ep+1), counter, time.time()-time_, err ))
-                    if counter % 500 == 0:
+                    if counter % 1000 == 0:
                         self.save(config.checkpoint_dir, counter)
         # Test
         else:
@@ -116,6 +131,9 @@ class VDSR(object):
             checkimage(merge(result, [nx, ny], self.c_dim))
             #checkimage(image_LR)
             imsave(image, config.result_dir+'/result.png', config)
+	    print("time: [%4.4f]" % (time.time()-time_))
+
+
 
     def load(self, checkpoint_dir):
         """
@@ -133,6 +151,9 @@ class VDSR(object):
             print("\n Checkpoint Loading Success! %s\n\n"% ckpt_path)
         else:
             print("\n! Checkpoint Loading Failed \n\n")
+    
+
+
     def save(self, checkpoint_dir, step):
         """
             To save the checkpoint use to test or pretrain
@@ -147,3 +168,4 @@ class VDSR(object):
         self.saver.save(self.sess,
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
+	print('save\r')

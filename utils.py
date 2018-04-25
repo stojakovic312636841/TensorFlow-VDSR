@@ -20,10 +20,15 @@ def imsave(image, path, config):
 
     # NOTE: because normial, we need mutlify 255 back    
     cv2.imwrite(os.path.join(os.getcwd(),path),image * 255.)
+    print('save image\r')
+
+
 
 def checkimage(image):
     cv2.imshow("test",image)
-    cv2.waitKey(0)
+    #cv2.waitKey(0)
+
+
 
 def modcrop(img, scale =3):
     """
@@ -42,13 +47,17 @@ def modcrop(img, scale =3):
         img = img[0:h, 0:w]
     return img
 
+
+
 def checkpoint_dir(config):
     if config.is_train:
         return os.path.join('./{}'.format(config.checkpoint_dir), "train.h5")
     else:
         return os.path.join('./{}'.format(config.checkpoint_dir), "test.h5")
 
-def preprocess(path ,scale = 3):
+
+
+def preprocess(path ,scale = 2):
     img = imread(path)
 
     label_ = modcrop(img, scale)
@@ -57,6 +66,8 @@ def preprocess(path ,scale = 3):
     bicbuic_img = cv2.resize(label_,None,fx = 1.0/scale ,fy = 1.0/scale, interpolation = cv2.INTER_CUBIC)# Resize by scaling factor
     input_ = cv2.resize(bicbuic_img,None,fx = scale ,fy=scale, interpolation = cv2.INTER_CUBIC)# Resize by scaling factor
     return input_, label_
+
+
 
 def prepare_data(dataset="Train",Input_img=""):
     """
@@ -75,6 +86,8 @@ def prepare_data(dataset="Train",Input_img=""):
             data = glob.glob(os.path.join(data_dir, "*.bmp")) # make set of all dataset file path
     return data
 
+
+
 def load_data(is_train, test_img):
     if is_train:
         data = prepare_data(dataset="Train")
@@ -84,56 +97,93 @@ def load_data(is_train, test_img):
         data = prepare_data(dataset="Test")
     return data
 
+
+
+
+
+def rotate(image, angle, center=None, scale=1.0):
+
+    (h, w) = image.shape[:2]
+
+
+    if center is None:
+        center = (w / 2, h / 2)
+
+
+    M = cv2.getRotationMatrix2D(center, angle, scale)
+    rotated = cv2.warpAffine(image, M, (w, h))
+
+    return rotated
+
+
 def make_sub_data(data, config):
-    """
-        Make the sub_data set
-        Args:
-            data : the set of all file path 
-            config : the all flags
-    """
-    sub_input_sequence = []
-    sub_label_sequence = []
-    for i in range(len(data)):
-        if config.is_train:
-            input_, label_, = preprocess(data[i], config.scale) # do bicbuic
-        else: # Test just one picture
-            input_, label_, = preprocess(data[i], config.scale) # do bicbuic
+	"""
+		Make the sub_data set
+		Args:
+		    data : the set of all file path 
+		    config : the all flags
+	"""
+        sub_input_sequence = []
+        sub_label_sequence = []
+
+	for scale in range(2,5):	    
+
+	    for i in range(len(data)):
+		if config.is_train:
+		    #input_, label_, = preprocess(data[i], config.scale) # do bicbuic only one scale
+		    input_, label_, = preprocess(data[i], scale) # do bicbuic turn around all scale
+		else: # Test just one picture
+		    input_, label_, = preprocess(data[i], config.scale) # do bicbuic
+	
+		if len(input_.shape) == 3: # is color
+		    h, w, c = input_.shape
+		else:
+		    h, w = input_.shape # is grayscale
+	
+		#checkimage(input_)
+		
+
+		nx, ny = 0, 0
+		for x in range(0, h - config.image_size + 1, config.stride):
+		    nx += 1; ny = 0
+		    for y in range(0, w - config.image_size + 1, config.stride):
+			ny += 1
+
+			sub_input = input_[x: x + config.image_size, y: y + config.image_size] # 41 * 41
+			sub_label = label_[x: x + config.label_size, y: y + config.label_size] # 41 * 41
+
+
+			# Reshape the subinput and sublabel
+			sub_input = sub_input.reshape([config.image_size, config.image_size, config.c_dim])
+			sub_label = sub_label.reshape([config.label_size, config.label_size, config.c_dim])
+
+			# Normialize
+			sub_input =  sub_input / 255.0
+			sub_label =  sub_label / 255.0
+			
+			#cv2.imshow("im1",sub_input)
+			#cv2.imshow("im2",sub_label)
+			#cv2.imshow("residual",sub_input - sub_label)
+			#cv2.waitKey(0)
+
+			# Rotate 90,180,270
+			for angle in range(0,360,90):	
+				sub_input = rotate(sub_input,angle)	
+				sub_label = rotate(sub_label,angle)	
+		
+				# Add to sequence
+				sub_input_sequence.append(sub_input)
+				sub_label_sequence.append(sub_label)
+
+				cv2.imshow("im1",sub_input)
+				cv2.imshow("im2",sub_label)
+				cv2.imshow("residual",sub_input - sub_label)
+				cv2.waitKey(1)
+				
+
         
-        if len(input_.shape) == 3: # is color
-            h, w, c = input_.shape
-        else:
-            h, w = input_.shape # is grayscale
-        #checkimage(input_)
-        nx, ny = 0, 0
-        for x in range(0, h - config.image_size + 1, config.stride):
-            nx += 1; ny = 0
-            for y in range(0, w - config.image_size + 1, config.stride):
-                ny += 1
-
-                sub_input = input_[x: x + config.image_size, y: y + config.image_size] # 41 * 41
-                sub_label = label_[x: x + config.label_size, y: y + config.label_size] # 41 * 41
-
-
-                # Reshape the subinput and sublabel
-                sub_input = sub_input.reshape([config.image_size, config.image_size, config.c_dim])
-                sub_label = sub_label.reshape([config.label_size, config.label_size, config.c_dim])
-
-                # Normialize
-                sub_input =  sub_input / 255.0
-                sub_label =  sub_label / 255.0
-                
-                #cv2.imshow("im1",sub_input)
-                #cv2.imshow("im2",sub_label)
-                #cv2.imshow("residual",sub_input - sub_label)
-                #cv2.waitKey(0)
-
-                # Add to sequence
-                sub_input_sequence.append(sub_input)
-                sub_label_sequence.append(sub_label)
-
-        
-    # NOTE: The nx, ny can be ignore in train
-    return sub_input_sequence, sub_label_sequence, nx, ny
+        # NOTE: The nx, ny can be ignore in train
+        return sub_input_sequence, sub_label_sequence, nx, ny
 
 
 def read_data(path):
@@ -169,6 +219,8 @@ def make_data_hf(input_, label_, config):
         hf.create_dataset('input', data=input_)
         hf.create_dataset('label', data=label_)
 
+
+
 def merge(images, size, c_dim):
     """
         images is the sub image set, merge it
@@ -185,11 +237,12 @@ def merge(images, size, c_dim):
         
     return img
 
+
+
 def input_setup(config):
     """
         Read image files and make their sub-images and saved them as a h5 file format
     """
-
     # Load data path, if is_train False, get test data
     data = load_data(config.is_train, config.test_img)
 
@@ -201,6 +254,7 @@ def input_setup(config):
     arrinput = np.asarray(sub_input_sequence) # [?, 41, 41, 3]
     arrlabel = np.asarray(sub_label_sequence) # [?, 41, 41, 3]
     make_data_hf(arrinput, arrlabel, config)
+
 
     return nx, ny
 
