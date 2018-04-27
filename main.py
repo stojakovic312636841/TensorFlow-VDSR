@@ -29,6 +29,7 @@ def main(_):
 	if FLAGS.is_train:
            vdsr.train(FLAGS)
 	else:
+	   FLAGS.c_dim = 3
 	   vdsr.test(FLAGS)
 
 if __name__=='__main__':

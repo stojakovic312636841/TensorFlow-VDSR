@@ -13,20 +13,20 @@ def imread(path):
     return img
 
 def imsave(image, path, config):
-    #checkimage(image)
+    checkimage(image)
     # Check the check dir, if not, create one
     if not os.path.isdir(os.path.join(os.getcwd(),config.result_dir)):
         os.makedirs(os.path.join(os.getcwd(),config.result_dir))
 
     # NOTE: because normial, we need mutlify 255 back    
-    cv2.imwrite(os.path.join(os.getcwd(),path),image * 255.)
+    cv2.imwrite(os.path.join(os.getcwd(),path),image)
     print('save image\r')
 
 
 
 def checkimage(image):
     cv2.imshow("test",image)
-    cv2.waitKey(100)
+    cv2.waitKey(1000)
 
 
 
@@ -68,6 +68,23 @@ def preprocess(path ,scale = 2):
 
     return input_, label_
 
+
+
+def preprocess_test(path ,scale = 2):
+    img = imread(path)
+    
+    #img is in YCrCb 
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+    #img is only Y-channel	
+    #img = img[:,:,0] 
+
+    label_ = modcrop(img, scale)
+    
+    # NOTE: Use to Produce the Low Resolution
+    bicbuic_img = cv2.resize(label_,None,fx = 1.0/scale ,fy = 1.0/scale, interpolation = cv2.INTER_CUBIC)# Resize by scaling factor
+    input_ = cv2.resize(bicbuic_img,None,fx = scale ,fy=scale, interpolation = cv2.INTER_CUBIC)# Resize by scaling factor
+    
+    return input_, label_
 
 
 def prepare_data(dataset="Train",Input_img=""):
@@ -196,15 +213,17 @@ def make_sub_data_test(data, config):
     sub_label_sequence = []		    
 
     for i in range(len(data)):
-	input_, label_, = preprocess(data[i], config.scale) # do bicbuic
-	
+	input_, label_, = preprocess_test(data[i], config.c_dim) # do bicbuic
+	input_ = input_[:,:,0]
+	label_ = label_[:,:,0]
+
 	if len(input_.shape) == 3: # is color
 	    h, w, c = input_.shape
 	else:
 	    h, w = input_.shape # is grayscale
 
 	#checkimage(input_)	
-	'''
+	
 	nx, ny = 0, 0
 	for x in range(0, h - config.image_size + 1, config.stride):
 	    nx += 1; ny = 0
@@ -216,8 +235,8 @@ def make_sub_data_test(data, config):
 
 
 		# Reshape the subinput and sublabel
-		sub_input = sub_input.reshape([config.image_size, config.image_size, config.c_dim])
-		sub_label = sub_label.reshape([config.label_size, config.label_size, config.c_dim])
+		sub_input = sub_input.reshape([config.image_size, config.image_size, 1])
+		sub_label = sub_label.reshape([config.label_size, config.label_size, 1])
 
 		# Normialize
 		sub_input =  sub_input / 255.0
@@ -240,7 +259,7 @@ def make_sub_data_test(data, config):
   
  	sub_input_sequence.append(sub_input)
 	sub_label_sequence.append(sub_label) 
-	   
+	'''   
     # NOTE: The nx, ny can be ignore in train
     return sub_input_sequence, sub_label_sequence, nx, ny
 
@@ -255,7 +274,7 @@ def read_data(path):
             data: '.h5' file format that contains  input values
             label: '.h5' file format that contains label values 
     """
-    with h5py.File(path, 'r') as hf:
+    with h5py.File(path, 'r') as hf:	
         input_ = np.array(hf.get('input'))
         label_ = np.array(hf.get('label'))
         return input_, label_
@@ -340,26 +359,60 @@ def input_setup(config):
     return nx, ny
 
 
+
+def input_setup_test(config):
+    """
+        Read image files and make their sub-images and saved them as a h5 file format
+    """
+    # Load data path, if is_train False, get test data
+    data = load_data(config.is_train, config.test_img)
+    
+    # Make sub_input and sub_label, if is_train false more return nx, ny
+    sub_input_sequence, sub_label_sequence, nx, ny = make_sub_data_test(data, config)
+
+
+    # Make list to numpy array. With this transform
+    arrinput = np.asarray(sub_input_sequence) # [?, 41, 41, 3]
+    arrlabel = np.asarray(sub_label_sequence) # [?, 41, 41, 3]
+    make_data_hf(arrinput, arrlabel, config)
+
+    return nx, ny
+
+
+
+
+
 def Ycbcr2RGB(Y_channel,config):
 	data = load_data(config.is_train, config.test_img)
 	for i in range(len(data)):
-	   #input and label is RGB
-	   input_, label_, = preprocess(data[i], config.scale)
+	   #input and label is YCbCr
+	   input_, label_, = preprocess_test(data[i], config.scale)
+	   output = np.zeros((Y_channel.shape[0], Y_channel.shape[1],3),np.uint8)
 	   
-	   #input from RGB to Ycbcr
-	   # convert color space from rgb to ycbcr 
-	   input_ =  input_.reshape([Y_channel.shape[0], Y_channel.shape[1], 3])
-	   imgYcc = cv2.cvtColor(input_, cv2.COLOR_BGR2YCR_CB)  
-
-	   # get values from ycbcr color space     
-           #Y = imgYcc.item(:,:,0)  
-           #Cr = imgYcc.item(:,:,1)  
-           #Cb = imgYcc.item(:,:,2) 
-
-	   #3 channel Y Cr Cb get together 
-	   imgYcc[:,:,0] = Y_channel
-	   
+	   Y_channel = Y_channel * 255
+	   Y_channel = Y_channel.reshape([Y_channel.shape[0], Y_channel.shape[1]])
+	  
+	   output[:,:,0] = Y_channel
+	   #output[:,:,0] = input_[0:Y_channel.shape[0],0:Y_channel.shape[1],0]
+	   output[:,:,1] = input_[0:Y_channel.shape[0],0:Y_channel.shape[1],1]
+	   output[:,:,2] = input_[0:Y_channel.shape[0],0:Y_channel.shape[1],2]
+	   output = output.astype(np.uint8)
+	   '''
+	   for x in range(0, Y_channel.shape[0]):
+	    for y in range(0, Y_channel.shape[1]):
+		for z in range(0,2):
+		  if output[x, y, z] > 255:
+		     output[x, y, z] = 255	
+		  if output[x, y, z] < 0:
+		     output[x, y, z] = 0
+	   '''
+	   #checkimage(output[:,:,0])
+	   #checkimage(output[:,:,1])	 
+	   #checkimage(output[:,:,2])
+	   #checkimage(output)  
 	   # convert color space from bgr to rgb                          
-	   img_RGB = cv2.cvtColor(imgYcc, cv2.COLOR_BGR2RGB)
-	return img_RGB
+	   output = cv2.cvtColor(output, cv2.COLOR_YCrCb2BGR)
+	return output
+
+
 

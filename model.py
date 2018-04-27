@@ -11,7 +11,8 @@ from utils import (
     checkimage,
     imsave,
     Ycbcr2RGB,
-    read_data_test
+    read_data_test,
+    input_setup_test
 )
 
 
@@ -55,7 +56,7 @@ class VDSR(object):
             
         self.pred = self.model()
         # residul =   labels - images
-	# loss = label - input - residul      --->   residul = pred = model(input)
+	# loss = label - input - residul   --->   residul = pred = model(input)
         self.loss = tf.reduce_mean(tf.square(self.labels - self.images - self.pred))
 
         self.saver = tf.train.Saver() # To save checkpoint
@@ -122,7 +123,7 @@ class VDSR(object):
                     batch_labels = label_[idx * config.batch_size : (idx + 1) * config.batch_size]
                     counter += 1
 		    
-		    #translation from (64,1,41,41) to (?,41,41,1)
+		    #translation Tensor from (64,1,41,41) to (?,41,41,1)
 		    batch_images = np.transpose(batch_images,(0,2,3,1))
 		    batch_labels = np.transpose(batch_labels,(0,2,3,1))
 
@@ -138,7 +139,7 @@ class VDSR(object):
     def test(self, config):
 	# NOTE : if train, the nx, ny are ingnored
 	# Read image files and make their sub-images and saved them as a h5 file format
-        nx, ny = input_setup(config)
+        nx, ny = input_setup_test(config)
 
 	# get the test.h5 file 
         data_dir = checkpoint_dir(config)
@@ -160,8 +161,8 @@ class VDSR(object):
 	#from Y channel to RGB
 	image = Ycbcr2RGB(image, config)
 	#show image
-        checkimage(image) #merge(result, [nx, ny], self.c_dim)
-        
+        #checkimage(image) #merge(result, [nx, ny], self.c_dim)
+        checkimage(image)
         imsave(image, config.result_dir+'/result.png', config)
 	print("time: [%4.4f]" % (time.time()-time_))
 
