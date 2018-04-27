@@ -26,7 +26,7 @@ def imsave(image, path, config):
 
 def checkimage(image):
     cv2.imshow("test",image)
-    #cv2.waitKey(0)
+    cv2.waitKey(100)
 
 
 
@@ -65,6 +65,7 @@ def preprocess(path ,scale = 2):
     # NOTE: Use to Produce the Low Resolution
     bicbuic_img = cv2.resize(label_,None,fx = 1.0/scale ,fy = 1.0/scale, interpolation = cv2.INTER_CUBIC)# Resize by scaling factor
     input_ = cv2.resize(bicbuic_img,None,fx = scale ,fy=scale, interpolation = cv2.INTER_CUBIC)# Resize by scaling factor
+
     return input_, label_
 
 
@@ -192,20 +193,18 @@ def make_sub_data_test(data, config):
 	    config : the all flags
     """
     sub_input_sequence = []
-    sub_label_sequence = []
-
-		    
+    sub_label_sequence = []		    
 
     for i in range(len(data)):
 	input_, label_, = preprocess(data[i], config.scale) # do bicbuic
-
+	
 	if len(input_.shape) == 3: # is color
 	    h, w, c = input_.shape
 	else:
 	    h, w = input_.shape # is grayscale
 
 	#checkimage(input_)	
-
+	'''
 	nx, ny = 0, 0
 	for x in range(0, h - config.image_size + 1, config.stride):
 	    nx += 1; ny = 0
@@ -227,15 +226,21 @@ def make_sub_data_test(data, config):
 		#cv2.imshow("im1",sub_input)
 		#cv2.imshow("im2",sub_label)
 		#cv2.imshow("residual",sub_input - sub_label)
-		#cv2.waitKey(0)
-	
-		sub_input = rotate(sub_input,angle)	
-		sub_label = rotate(sub_label,angle)	
+		#cv2.waitKey(10)	
 
 		# Add to sequence
 		sub_input_sequence.append(sub_input)
 		sub_label_sequence.append(sub_label)
-        
+	'''
+	nx, ny = 1, 1
+
+	# Normialize
+	sub_input = input_ / 255.0
+	sub_label = label_ / 255.0 
+  
+ 	sub_input_sequence.append(sub_input)
+	sub_label_sequence.append(sub_label) 
+	   
     # NOTE: The nx, ny can be ignore in train
     return sub_input_sequence, sub_label_sequence, nx, ny
 
@@ -253,6 +258,23 @@ def read_data(path):
     with h5py.File(path, 'r') as hf:
         input_ = np.array(hf.get('input'))
         label_ = np.array(hf.get('label'))
+        return input_, label_
+
+
+
+def read_data_test(path):
+    """
+        Read h5 format data file
+
+        Args:
+            path: file path of desired file
+            data: '.h5' file format that contains  input values
+            label: '.h5' file format that contains label values 
+    """
+    with h5py.File(path, 'r') as hf:
+        input_ = np.array(hf.get('data'))
+        label_ = np.array(hf.get('label'))
+	
         return input_, label_
 
 
@@ -302,7 +324,7 @@ def input_setup(config):
     """
     # Load data path, if is_train False, get test data
     data = load_data(config.is_train, config.test_img)
-
+    
     # Make sub_input and sub_label, if is_train false more return nx, ny
     if config.is_train:
     	sub_input_sequence, sub_label_sequence, nx, ny = make_sub_data_train(data, config)
@@ -316,4 +338,28 @@ def input_setup(config):
     make_data_hf(arrinput, arrlabel, config)
 
     return nx, ny
+
+
+def Ycbcr2RGB(Y_channel,config):
+	data = load_data(config.is_train, config.test_img)
+	for i in range(len(data)):
+	   #input and label is RGB
+	   input_, label_, = preprocess(data[i], config.scale)
+	   
+	   #input from RGB to Ycbcr
+	   # convert color space from rgb to ycbcr 
+	   input_ =  input_.reshape([Y_channel.shape[0], Y_channel.shape[1], 3])
+	   imgYcc = cv2.cvtColor(input_, cv2.COLOR_BGR2YCR_CB)  
+
+	   # get values from ycbcr color space     
+           #Y = imgYcc.item(:,:,0)  
+           #Cr = imgYcc.item(:,:,1)  
+           #Cb = imgYcc.item(:,:,2) 
+
+	   #3 channel Y Cr Cb get together 
+	   imgYcc[:,:,0] = Y_channel
+	   
+	   # convert color space from bgr to rgb                          
+	   img_RGB = cv2.cvtColor(imgYcc, cv2.COLOR_BGR2RGB)
+	return img_RGB
 

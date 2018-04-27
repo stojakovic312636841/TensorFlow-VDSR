@@ -9,7 +9,9 @@ from utils import (
     read_data,
     merge,
     checkimage,
-    imsave
+    imsave,
+    Ycbcr2RGB,
+    read_data_test
 )
 
 
@@ -33,7 +35,8 @@ class VDSR(object):
     def build_model(self):
         self.images = tf.placeholder(tf.float32, [None, self.image_size, self.image_size, self.c_dim], name='images')
         self.labels = tf.placeholder(tf.float32, [None, self.label_size, self.label_size, self.c_dim], name='labels')
-        
+        #self.images = tf.placeholder(tf.float32, [None, 1080, 1920, self.c_dim], name='images')
+        #self.labels = tf.placeholder(tf.float32, [None, 1080, 1920, self.c_dim], name='labels')
         
         self.weights = {
             'w_start': tf.Variable(tf.random_normal([3, 3, self.c_dim, 64], stddev =np.sqrt(2.0/9)), name='w_start'),
@@ -52,6 +55,7 @@ class VDSR(object):
             
         self.pred = self.model()
         # residul =   labels - images
+	# loss = label - input - residul      --->   residul = pred = model(input)
         self.loss = tf.reduce_mean(tf.square(self.labels - self.images - self.pred))
 
         self.saver = tf.train.Saver() # To save checkpoint
@@ -79,7 +83,8 @@ class VDSR(object):
         data_dir = checkpoint_dir(config)
         
 	# Read h5 format data file
-        input_, label_ = read_data(data_dir)
+	#input_, label_ = read_data(data_dir) 
+        input_, label_ = read_data_test(data_dir) 
 
         # Stochastic gradient descent with the standard backpropagation
 
@@ -116,6 +121,11 @@ class VDSR(object):
                     batch_images = input_[idx * config.batch_size : (idx + 1) * config.batch_size]
                     batch_labels = label_[idx * config.batch_size : (idx + 1) * config.batch_size]
                     counter += 1
+		    
+		    #translation from (64,1,41,41) to (?,41,41,1)
+		    batch_images = np.transpose(batch_images,(0,2,3,1))
+		    batch_labels = np.transpose(batch_labels,(0,2,3,1))
+
                     _, err = self.sess.run([self.train_op, self.loss], feed_dict={self.images: batch_images, self.labels: batch_labels})
 
                     if counter % 100 == 0:
@@ -136,12 +146,21 @@ class VDSR(object):
 	# Read h5 format data file
         input_, label_ = read_data(data_dir)
 
+	#To load the checkpoint use to test or pretrain and refine model
+        self.load(config.checkpoint_dir)
+
         print("Now Start Testing...")        
 	time_ = time.time()    
 
         result = self.pred.eval({self.images: input_}) + input_
+	
+	#image merge : only Y channel
         image = merge(result, [nx, ny], self.c_dim)
-        checkimage(merge(result, [nx, ny], self.c_dim))
+	
+	#from Y channel to RGB
+	image = Ycbcr2RGB(image, config)
+	#show image
+        checkimage(image) #merge(result, [nx, ny], self.c_dim)
         
         imsave(image, config.result_dir+'/result.png', config)
 	print("time: [%4.4f]" % (time.time()-time_))
